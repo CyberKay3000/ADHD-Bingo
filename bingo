@@ -1,0 +1,729 @@
+{
+  "name": "Daily Bingo",
+  "short_name": "Daily Bingo",
+  "description": "每日任务 Bingo，连成一线即完成",
+  "start_url": "./bingo.html",
+  "display": "standalone",
+  "background_color": "#f7f4f0",
+  "theme_color": "#5c6bc0",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
+
+const CACHE = 'daily-bingo-v1';
+const ASSETS = [
+  './bingo.html',
+  './manifest.json',
+];
+
+self.addEventListener('install', e => {
+  e.waitUntil(
+    caches.open(CACHE).then(c => c.addAll(ASSETS))
+  );
+  self.skipWaiting();
+});
+
+self.addEventListener('activate', e => {
+  e.waitUntil(
+    caches.keys().then(keys =>
+      Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
+    )
+  );
+  self.clients.claim();
+});
+
+self.addEventListener('fetch', e => {
+  e.respondWith(
+    caches.match(e.request).then(cached => cached || fetch(e.request))
+  );
+});
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Daily Bingo">
+<meta name="theme-color" content="#f7f4f0">
+<link rel="manifest" href="manifest.json">
+<title>Daily Bingo</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700;900&family=DM+Serif+Display&display=swap');
+
+  :root {
+    --bg: #f7f4f0;
+    --card-bg: #ffffff;
+    --accent: #5c6bc0;
+    --text: #1a1a1a;
+    --text-muted: #aaa;
+    --shadow: 0 2px 10px rgba(0,0,0,0.06);
+    --shadow-hover: 0 6px 20px rgba(0,0,0,0.11);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    font-family: 'Noto Sans SC', sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 28px 14px 56px;
+    color: var(--text);
+  }
+
+  .header { width: 100%; max-width: 500px; margin-bottom: 18px; }
+  .title  { font-family: 'DM Serif Display', serif; font-size: 2rem; letter-spacing: -0.5px; }
+  .date   { font-size: 0.75rem; color: var(--text-muted); margin-top: 2px; letter-spacing: 0.5px; }
+
+  .progress-row {
+    display: flex; align-items: center; gap: 14px;
+    margin-bottom: 22px; width: 100%; max-width: 500px;
+  }
+  .ring-wrap { position: relative; width: 58px; height: 58px; flex-shrink: 0; }
+  .ring-wrap svg { transform: rotate(-90deg); }
+  .ring-bg  { fill: none; stroke: #e0dbd4; stroke-width: 5; }
+  .ring-fill {
+    fill: none; stroke: var(--accent); stroke-width: 5;
+    stroke-linecap: round; stroke-dasharray: 151; stroke-dashoffset: 151;
+    transition: stroke-dashoffset 0.6s cubic-bezier(.4,0,.2,1);
+  }
+  .ring-label {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.68rem; font-weight: 700; color: var(--accent);
+  }
+  .progress-text h3 { font-size: 0.95rem; font-weight: 600; }
+  .progress-text p  { font-size: 0.75rem; color: var(--text-muted); margin-top: 2px; }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 6px; width: 100%; max-width: 500px;
+  }
+
+  .cell {
+    background: var(--card-bg);
+    border-radius: 10px;
+    aspect-ratio: 1;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    text-align: center;
+    padding: 4px 3px;
+    cursor: pointer;
+    box-shadow: var(--shadow);
+    border: 2px solid transparent;
+    transition: transform 0.15s, box-shadow 0.2s, background 0.25s, color 0.2s;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    line-height: 1.25;
+    position: relative;
+    overflow: hidden;
+    word-break: break-all;
+  }
+  .cell:hover  { transform: translateY(-2px); box-shadow: var(--shadow-hover); }
+  .cell:active { transform: scale(0.93); }
+
+  /* Font size tiers */
+  .cell[data-size="xl"] { font-size: 1.1rem;  font-weight: 900; }
+  .cell[data-size="lg"] { font-size: 0.8rem;   font-weight: 700; }
+  .cell[data-size="md"] { font-size: 0.68rem;  font-weight: 500; }
+  .cell[data-size="sm"] { font-size: 0.58rem;  font-weight: 400; }
+
+  /* Key tasks: red dot bottom center */
+  .cell[data-key="true"]:not(.done)::after {
+    content: '';
+    position: absolute; bottom: 4px; left: 50%;
+    transform: translateX(-50%);
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    background: var(--accent);
+  }
+
+  .cell.done {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+  .cell.done[data-size="xl"] { font-weight: 900; }
+  .cell.done[data-size="lg"] { font-weight: 700; }
+
+  .cell.win-line { animation: pulse-win 0.45s ease; }
+  @keyframes pulse-win {
+    0%  { transform: scale(1); }
+    50% { transform: scale(1.09); }
+    100%{ transform: scale(1); }
+  }
+
+  .footer {
+    display: flex; justify-content: space-between; align-items: center;
+    width: 100%; max-width: 500px;
+    margin-top: 16px; font-size: 0.75rem; color: var(--text-muted);
+  }
+  .btns { display: flex; gap: 8px; }
+  .btn {
+    background: none; border: none; cursor: pointer;
+    display: flex; align-items: center; gap: 4px;
+    font-size: 0.75rem; color: var(--text-muted);
+    font-family: 'Noto Sans SC', sans-serif;
+    padding: 6px 10px; border-radius: 8px;
+    transition: background 0.2s, color 0.2s;
+  }
+  .btn:hover { background: #ede8e2; color: var(--text); }
+
+  /* ── Edit Panel ── */
+  .edit-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.38); z-index: 500;
+    align-items: flex-end; justify-content: center;
+  }
+  .edit-overlay.open { display: flex; }
+
+  .edit-panel {
+    background: #fff; border-radius: 24px 24px 0 0;
+    width: 100%; max-width: 540px;
+    padding: 26px 20px 40px;
+    max-height: 90vh; overflow-y: auto;
+    display: flex; flex-direction: column; gap: 14px;
+    animation: slideUp 0.32s cubic-bezier(.34,1.3,.64,1);
+  }
+  @keyframes slideUp {
+    from { transform: translateY(100%); }
+    to   { transform: translateY(0); }
+  }
+  .edit-panel h2 {
+    font-size: 1rem; font-weight: 700;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .edit-panel h2 button {
+    background: none; border: none; cursor: pointer;
+    font-size: 1.2rem; color: var(--text-muted); line-height: 1;
+  }
+  .edit-desc {
+    font-size: 0.72rem; color: var(--text-muted);
+    line-height: 1.7; background: #faf8f5;
+    border-radius: 8px; padding: 10px 12px;
+  }
+  .edit-desc code { font-family: monospace; background: #ede8e2; padding: 1px 4px; border-radius: 3px; }
+  .edit-textarea {
+    width: 100%; height: 220px;
+    border: 1.5px solid #e0dbd4; border-radius: 12px;
+    padding: 12px 14px; font-size: 0.8rem;
+    font-family: 'Noto Sans SC', sans-serif;
+    line-height: 1.8; resize: none; outline: none;
+    color: var(--text); background: #faf8f6;
+    transition: border-color 0.2s;
+  }
+  .edit-textarea:focus { border-color: var(--accent); }
+  .edit-count { font-size: 0.7rem; color: var(--text-muted); text-align: right; }
+  .edit-actions { display: flex; gap: 10px; }
+  .edit-apply {
+    flex: 1; padding: 13px;
+    background: var(--accent); color: #fff;
+    border: none; border-radius: 12px;
+    font-size: 0.88rem; font-weight: 600;
+    font-family: 'Noto Sans SC', sans-serif;
+    cursor: pointer; transition: opacity 0.2s;
+  }
+  .edit-apply:hover { opacity: 0.88; }
+  .edit-cancel {
+    padding: 13px 20px; background: #f0ece8;
+    color: var(--text); border: none; border-radius: 12px;
+    font-size: 0.88rem; font-family: 'Noto Sans SC', sans-serif; cursor: pointer;
+  }
+
+  #confetti-canvas {
+    position: fixed; top: 0; left: 0;
+    width: 100%; height: 100%;
+    pointer-events: none; z-index: 999;
+  }
+
+  .win-toast {
+    position: fixed; top: 50%; left: 50%;
+    transform: translate(-50%, -50%) scale(0.8);
+    background: white; border-radius: 20px;
+    padding: 26px 34px; text-align: center;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.16);
+    z-index: 1000; opacity: 0;
+    transition: all 0.4s cubic-bezier(.34,1.56,.64,1);
+    pointer-events: none;
+  }
+  .win-toast.show { opacity: 1; transform: translate(-50%,-50%) scale(1); pointer-events: auto; }
+  .win-toast .emoji { font-size: 2.6rem; }
+  .win-toast h2 { font-size: 1.1rem; font-weight: 700; margin: 10px 0 5px; }
+  .win-toast p  { font-size: 0.82rem; color: var(--text-muted); }
+  .win-toast .dismiss {
+    margin-top: 16px; padding: 10px 28px;
+    background: var(--accent); color: white;
+    border: none; border-radius: 30px; cursor: pointer;
+    font-size: 0.82rem; font-family: 'Noto Sans SC', sans-serif; font-weight: 500;
+  }
+</style>
+</head>
+<body>
+
+<canvas id="confetti-canvas"></canvas>
+
+<div class="header">
+  <div class="title">Daily Bingo</div>
+  <div class="date" id="date-label"></div>
+</div>
+
+<div class="progress-row">
+  <div class="ring-wrap">
+    <svg width="58" height="58" viewBox="0 0 58 58">
+      <circle class="ring-bg" cx="29" cy="29" r="24"/>
+      <circle class="ring-fill" id="ring" cx="29" cy="29" r="24"/>
+    </svg>
+    <div class="ring-label" id="pct-label">0%</div>
+  </div>
+  <div class="progress-text">
+    <h3>今日进度</h3>
+    <p id="progress-sub">开始你的今日任务</p>
+  </div>
+</div>
+
+<div class="grid" id="grid"></div>
+
+<div class="footer">
+  <div id="lines-label">0 条连线</div>
+  <div class="btns">
+    <button class="btn" onclick="openEdit()">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+      编辑
+    </button>
+    <button class="btn" onclick="randomize()">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/></svg>
+      随机
+    </button>
+    <button class="btn" onclick="resetDone()">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+      重置
+    </button>
+  </div>
+</div>
+
+<!-- Edit Panel -->
+<div class="edit-overlay" id="edit-overlay" onclick="overlayClick(event)">
+  <div class="edit-panel">
+    <h2>编辑任务 <button onclick="closeEdit()">✕</button></h2>
+    <div class="edit-desc">
+      每行一个任务，共 <b>25 条</b>。前缀可选：<br>
+      <code>!</code> 重点标记（小红点，用于睡觉/吃饭/吃药等）<br>
+      <code>**</code> 超大字号 &nbsp; <code>*</code> 大字号 &nbsp; <code>.</code> 小字号<br>
+      用 <code>/</code> 在格内换行，如：<code>*运动/15min</code>
+    </div>
+    <textarea class="edit-textarea" id="edit-textarea" spellcheck="false"
+      oninput="updateCount()"></textarea>
+    <div class="edit-count" id="edit-count">0 / 25 条</div>
+    <div class="edit-actions">
+      <button class="edit-cancel" onclick="closeEdit()">取消</button>
+      <button class="edit-apply" onclick="applyEdit()">生成并应用 →</button>
+    </div>
+  </div>
+</div>
+
+<div class="win-toast" id="win-toast">
+  <div class="emoji" id="win-emoji">🎉</div>
+  <h2 id="win-title">太棒了！</h2>
+  <p id="win-msg">今日任务完成，继续保持！</p>
+  <button class="dismiss" onclick="dismissWin()">好的，继续加油！</button>
+</div>
+
+<script>
+// ─── Task Data ───────────────────────────────────────────────────
+// size: 'xl' | 'lg' | 'md' | 'sm'
+// key: true = vital (sleep / eat / shower / meds) → red dot
+const FIXED_TASKS = [
+  // row 1 — 出门 / 白天行动
+  { text:'出门',           size:'xl', key:false },
+  { text:'晒太阳',         size:'lg', key:false },
+  { text:'喝够水',         size:'lg', key:true  },
+  { text:'看点书',         size:'md', key:false },
+  { text:'随便逛逛',       size:'md', key:false },
+  // row 2
+  { text:'自控少刷\n信息流', size:'sm', key:false },
+  { text:'学一点',         size:'lg', key:false },
+  { text:'吃早饭',         size:'lg', key:true  },
+  { text:'写日记',         size:'md', key:false },
+  { text:'未久坐\n超过1h', size:'sm', key:false },
+  // row 3 — 低精力保底线
+  { text:'看剧',           size:'xl', key:false },
+  { text:'运动\n15min',    size:'md', key:false },
+  { text:'好好吃饭',       size:'lg', key:true  },
+  { text:'整理桌面',       size:'md', key:false },
+  { text:'吃补剂/药',      size:'md', key:true  },
+  // row 4
+  { text:'晒太阳',         size:'lg', key:false },
+  { text:'看电影\n/阅读',  size:'sm', key:false },
+  { text:'扫地',           size:'xl', key:false },
+  { text:'喝水\n两杯以上', size:'sm', key:true  },
+  { text:'洗头',           size:'xl', key:true  },
+  // row 5 — 生存基础
+  { text:'规律睡眠',       size:'lg', key:true  },
+  { text:'取/拆快递',      size:'sm', key:false },
+  { text:'扔垃圾',         size:'md', key:false },
+  { text:'洗澡',           size:'xl', key:true  },
+  { text:'刷牙',           size:'xl', key:false },
+];
+
+// 随机任务总池（从中每次随机抽25条，保留关键任务固定位置）
+const RANDOM_POOL = [
+  { text:'出门走走',       size:'lg', key:false },
+  { text:'下楼取快递',     size:'sm', key:false },
+  { text:'去便利店',       size:'md', key:false },
+  { text:'晒太阳',         size:'lg', key:false },
+  { text:'在外面逛逛',     size:'sm', key:false },
+  { text:'少刷手机',       size:'md', key:false },
+  { text:'背单词',         size:'md', key:false },
+  { text:'学一点',         size:'lg', key:false },
+  { text:'看教程',         size:'md', key:false },
+  { text:'读几页书',       size:'sm', key:false },
+  { text:'画张画',         size:'md', key:false },
+  { text:'写日记',         size:'md', key:false },
+  { text:'整理邮件',       size:'sm', key:false },
+  { text:'记账',           size:'xl', key:false },
+  { text:'扫地',           size:'xl', key:false },
+  { text:'整理桌面',       size:'md', key:false },
+  { text:'清理床铺',       size:'md', key:false },
+  { text:'扔垃圾',         size:'md', key:false },
+  { text:'煮顿饭',         size:'lg', key:false },
+  { text:'看剧',           size:'xl', key:false },
+  { text:'看电影',         size:'lg', key:false },
+  { text:'看纪录片',       size:'md', key:false },
+  { text:'听播客',         size:'md', key:false },
+  { text:'运动\n15min',    size:'md', key:false },
+  { text:'拉伸一下',       size:'md', key:false },
+  { text:'深呼吸',         size:'md', key:false },
+  { text:'冥想5分钟',      size:'sm', key:false },
+  { text:'未久坐\n超过1h', size:'sm', key:false },
+  { text:'自控少刷\n信息流', size:'sm', key:false },
+  { text:'联系朋友',       size:'md', key:false },
+  { text:'回条消息',       size:'md', key:false },
+];
+
+// 关键任务（固定出现在随机结果中，保证生存底线）
+const KEY_TASKS_FIXED = [
+  { text:'好好吃饭',       size:'lg', key:true  },
+  { text:'吃早饭',         size:'lg', key:true  },
+  { text:'喝够水',         size:'lg', key:true  },
+  { text:'吃补剂/药',      size:'md', key:true  },
+  { text:'规律睡眠',       size:'lg', key:true  },
+  { text:'洗澡',           size:'xl', key:true  },
+  { text:'刷牙',           size:'xl', key:false },
+];
+
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length-1; i > 0; i--) {
+    const j = Math.floor(Math.random()*(i+1));
+    [a[i],a[j]] = [a[j],a[i]];
+  }
+  return a;
+}
+
+function buildRandomBoard() {
+  // 7 key tasks fixed + 18 from random pool
+  const extras = shuffle(RANDOM_POOL).slice(0, 18);
+  const all = shuffle([...KEY_TASKS_FIXED, ...extras]);
+  return all.slice(0, 25);
+}
+
+const STORAGE_KEY = 'adhd_bingo_custom_v2';
+
+// ─── State ───────────────────────────────────────────────────────
+let tasks = [];
+let done = new Set();
+let completedLines = new Set();
+let totalLines = 0;
+
+const ENCOURAGEMENTS = [
+  { emoji:'🎉', title:'太棒了！',   msg:'完成一条连线，继续保持这股劲！' },
+  { emoji:'🌟', title:'超级厉害！', msg:'你今天真的很了不起！' },
+  { emoji:'🏆', title:'达成连线！', msg:'大脑已上线，状态绝佳！' },
+  { emoji:'🚀', title:'冲冲冲！',   msg:'又一条任务线完成，你最棒！' },
+  { emoji:'✨', title:'闪耀吧！',   msg:'你正在打败拖延症，加油！' },
+];
+
+const CHEERS = ['加油','还不错','继续','很棒','冲！','坚持','厉害','好样的'];
+
+function getDateLabel() {
+  const d = new Date();
+  const weeks = ['SUN','MON','TUE','WED','THU','FRI','SAT'];
+  return `${d.getFullYear()} · ${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')} · ${weeks[d.getDay()]}`;
+}
+
+function loadCustom() {
+  try { const r = localStorage.getItem(STORAGE_KEY); if (r) return JSON.parse(r); } catch(e) {}
+  return null;
+}
+
+function pickTasks(random) {
+  if (random) return buildRandomBoard();
+  return loadCustom() || [...FIXED_TASKS];
+}
+
+// ─── Render ──────────────────────────────────────────────────────
+function render() {
+  const grid = document.getElementById('grid');
+  grid.innerHTML = '';
+  tasks.forEach((t, i) => {
+    const cell = document.createElement('div');
+    cell.className = 'cell' + (done.has(i) ? ' done' : '');
+    cell.dataset.size = t.size;
+    cell.dataset.key  = t.key ? 'true' : 'false';
+    cell.innerHTML = t.text.split('\n')
+      .map(l => `<span style="display:block">${l}</span>`).join('');
+    cell.onclick = () => toggle(i);
+    grid.appendChild(cell);
+  });
+  updateProgress();
+  checkBingo();
+}
+
+function toggle(i) {
+  done.has(i) ? done.delete(i) : done.add(i);
+  render();
+}
+
+// ─── Progress ────────────────────────────────────────────────────
+function updateProgress() {
+  const hasLine = completedLines.size > 0;
+  const ringEl = document.getElementById('ring');
+  const pctEl  = document.getElementById('pct-label');
+  const sub    = document.getElementById('progress-sub');
+
+  if (!hasLine) {
+    // No bingo line yet → show raw task count but cap ring at 99%
+    const rawPct = Math.min(Math.round(done.size / 5 * 20), 95); // scale to feel meaningful
+    ringEl.style.strokeDashoffset = 151 - 151 * rawPct / 100;
+    pctEl.textContent = CHEERS[done.size % CHEERS.length];
+    pctEl.style.fontSize = '0.52rem';
+    if (done.size === 0) sub.textContent = '开始你的今日任务';
+    else sub.textContent = `已打卡 ${done.size} 项，连成一线即完成`;
+  } else {
+    // At least one bingo line → 100% base
+    // extra = every done task beyond the cells in the FIRST completed line
+    const firstLineCells = new Set();
+    getLines().forEach((line, idx) => {
+      if (completedLines.has(idx)) line.forEach(i => firstLineCells.add(i));
+    });
+    // only count the minimal first-line coverage (5 cells), rest are extra
+    const extraDone = Math.max(0, done.size - 5);
+    ringEl.style.strokeDashoffset = 0;
+    if (extraDone > 0) {
+      pctEl.textContent = '+' + extraDone;
+      pctEl.style.fontSize = '0.7rem';
+      sub.textContent = `今日达成！超额完成 ${extraDone} 项 🌟`;
+    } else {
+      pctEl.textContent = '100%';
+      pctEl.style.fontSize = '0.62rem';
+      sub.textContent = `完成 ${completedLines.size} 条连线，今日达成！🎉`;
+    }
+  }
+}
+
+function countLineCells() {
+  // count unique cells that belong to any completed line
+  const covered = new Set();
+  getLines().forEach((line, idx) => {
+    if (completedLines.has(idx)) line.forEach(i => covered.add(i));
+  });
+  return covered.size;
+}
+
+// ─── Bingo ───────────────────────────────────────────────────────
+function getLines() {
+  const lines = [];
+  for (let r=0;r<5;r++) { const l=[]; for(let c=0;c<5;c++) l.push(r*5+c); lines.push(l); }
+  for (let c=0;c<5;c++) { const l=[]; for(let r=0;r<5;r++) l.push(r*5+c); lines.push(l); }
+  // diagonals
+  lines.push([0,6,12,18,24]);
+  lines.push([4,8,12,16,20]);
+  return lines;
+}
+
+function checkBingo() {
+  let newWin = false;
+  const cells = document.querySelectorAll('.cell');
+  getLines().forEach((line, idx) => {
+    if (line.every(i => done.has(i)) && !completedLines.has(idx)) {
+      completedLines.add(idx); newWin = true;
+      line.forEach(i => {
+        cells[i].classList.add('win-line');
+        setTimeout(() => cells[i].classList.remove('win-line'), 500);
+      });
+    }
+  });
+  totalLines = completedLines.size;
+  document.getElementById('lines-label').textContent = `${totalLines} 条连线`;
+  if (newWin) { setTimeout(showWin, 420); launchConfetti(); }
+}
+
+function showWin() {
+  const e = ENCOURAGEMENTS[Math.floor(Math.random()*ENCOURAGEMENTS.length)];
+  document.getElementById('win-emoji').textContent = e.emoji;
+  document.getElementById('win-title').textContent = e.title;
+  document.getElementById('win-msg').textContent   = e.msg;
+  document.getElementById('win-toast').classList.add('show');
+}
+function dismissWin() { document.getElementById('win-toast').classList.remove('show'); }
+
+// ─── Controls ────────────────────────────────────────────────────
+function randomize() {
+  tasks = pickTasks(true);
+  done.clear(); completedLines.clear(); totalLines = 0;
+  render();
+}
+function resetDone() {
+  done.clear(); completedLines.clear(); totalLines = 0;
+  render();
+}
+
+// ─── Edit ────────────────────────────────────────────────────────
+function taskToLine(t) {
+  let prefix = '';
+  if (t.key) prefix += '!';
+  if (t.size === 'xl') prefix += '**';
+  else if (t.size === 'lg') prefix += '*';
+  else if (t.size === 'sm') prefix += '.';
+  return prefix + t.text.replace(/\n/g, '/');
+}
+
+function lineToTask(line) {
+  let s = line.trim();
+  let key = false, size = 'md';
+  if (s.startsWith('!')) { key = true; s = s.slice(1); }
+  if (s.startsWith('**')) { size = 'xl'; s = s.slice(2); }
+  else if (s.startsWith('*')) { size = 'lg'; s = s.slice(1); }
+  else if (s.startsWith('.')) { size = 'sm'; s = s.slice(1); }
+  // auto size by length if no prefix given
+  if (size === 'md') {
+    const len = s.replace(/\//g,'').length;
+    if (len <= 2) size = 'xl';
+    else if (len <= 4) size = 'lg';
+    else if (len >= 8) size = 'sm';
+  }
+  return { text: s.replace(/\//g, '\n'), size, key };
+}
+
+function openEdit() {
+  document.getElementById('edit-textarea').value = tasks.map(taskToLine).join('\n');
+  updateCount();
+  document.getElementById('edit-overlay').classList.add('open');
+}
+function closeEdit() { document.getElementById('edit-overlay').classList.remove('open'); }
+function overlayClick(e) { if (e.target.id === 'edit-overlay') closeEdit(); }
+
+function updateCount() {
+  const lines = document.getElementById('edit-textarea').value
+    .split('\n').map(l=>l.trim()).filter(Boolean);
+  document.getElementById('edit-count').textContent = `${lines.length} / 25 条`;
+  document.getElementById('edit-count').style.color = lines.length === 25 ? '#66bb6a' : '#e57373';
+}
+
+function applyEdit() {
+  const lines = document.getElementById('edit-textarea').value
+    .split('\n').map(l=>l.trim()).filter(Boolean);
+  if (lines.length !== 25) { alert(`需要恰好 25 条任务，当前有 ${lines.length} 条`); return; }
+  const parsed = lines.map(lineToTask);
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed)); } catch(e) {}
+  tasks = parsed;
+  done.clear(); completedLines.clear(); totalLines = 0;
+  closeEdit();
+  render();
+}
+
+// ─── Confetti ────────────────────────────────────────────────────
+let confettiFrame;
+function launchConfetti() {
+  const canvas = document.getElementById('confetti-canvas');
+  const ctx = canvas.getContext('2d');
+  canvas.width = innerWidth; canvas.height = innerHeight;
+  const colors = ['#5c6bc0','#7986cb','#ef5350','#ffa726','#66bb6a','#ab47bc','#26c6da','#ffee58','#ff7043'];
+
+  // Burst from left side and right side simultaneously
+  function makePiece(side) {
+    const fromLeft = side === 'left';
+    const angle = fromLeft
+      ? (Math.random() * 70 - 20) * Math.PI / 180   // shoot rightward
+      : (Math.PI + (Math.random() * 70 - 20) * Math.PI / 180); // shoot leftward
+    const speed = 8 + Math.random() * 14;
+    return {
+      x: fromLeft ? 0 : canvas.width,
+      y: canvas.height * (0.3 + Math.random() * 0.5),
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed - 6,
+      gravity: 0.35 + Math.random() * 0.2,
+      r: 4 + Math.random() * 6,
+      color: colors[Math.floor(Math.random() * colors.length)],
+      tilt: 0, tiltAngle: 0, tiltSpeed: 0.06 + Math.random() * 0.1,
+      shape: Math.random() > 0.4 ? 'rect' : 'circle',
+      alpha: 1,
+    };
+  }
+
+  const pieces = [
+    ...Array.from({length:60}, () => makePiece('left')),
+    ...Array.from({length:60}, () => makePiece('right')),
+  ];
+
+  let elapsed = 0;
+  if (confettiFrame) cancelAnimationFrame(confettiFrame);
+
+  function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    pieces.forEach(p => {
+      p.vx *= 0.98;
+      p.vy += p.gravity;
+      p.x += p.vx;
+      p.y += p.vy;
+      p.tiltAngle += p.tiltSpeed;
+      p.tilt = Math.sin(p.tiltAngle) * 14;
+      if (elapsed > 80) p.alpha = Math.max(0, p.alpha - 0.012);
+
+      ctx.save();
+      ctx.globalAlpha = p.alpha;
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.tilt * Math.PI / 180);
+      ctx.fillStyle = p.color;
+      if (p.shape === 'rect') ctx.fillRect(-p.r/2, -p.r/2, p.r * 1.6, p.r * 0.55);
+      else { ctx.beginPath(); ctx.arc(0, 0, p.r/2, 0, Math.PI*2); ctx.fill(); }
+      ctx.restore();
+    });
+    elapsed++;
+    if (elapsed < 160) confettiFrame = requestAnimationFrame(draw);
+    else ctx.clearRect(0, 0, canvas.width, canvas.height);
+  }
+  draw();
+}
+
+// ─── Boot ────────────────────────────────────────────────────────
+document.getElementById('date-label').textContent = getDateLabel();
+tasks = pickTasks(false);
+render();
+
+// PWA Service Worker
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+</script>
+</body>
+</html>
